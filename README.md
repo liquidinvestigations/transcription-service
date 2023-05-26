@@ -1,3 +1,17 @@
+# Fork of https://github.com/innovatorved/whisper-openai-gradio-implementation
+
+
+Changes made:
+
+- update to python 3.11 and gradio 3.32 (latest)
+- disable telemetry and sharing
+- download "large" model in docker container
+- print `.srt` instead of `.text`
+
+
+---
+
+Original readme below.
 
 # Whisper OpenAi Tool Gradio Web implementation
 Whisper is an automatic speech recognition (ASR) system Gradio Web UI Implementation

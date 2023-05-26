@@ -1,14 +1,23 @@
-FROM python:3.8-slim-buster
+FROM python:3.11-bullseye
 
-RUN apt update && apt install -y ffmpeg
+RUN apt update && apt install -y ffmpeg git
 
 WORKDIR /app
-
-COPY requirements.txt requirements.txt
-RUN pip3 install -r requirements.txt
+RUN pip3 install pipenv
+ADD Pipfile Pipfile.lock ./
+RUN pipenv install --system --deploy --ignore-pipfile
+# ADD requirements.txt ./
+# RUN pip3 install -r requirements.txt
 
 ENV GRADIO_SERVER_PORT 8000
+ENV PYTHONUNBUFFERED TRUE
+ENV GRADIO_ANALYTICS_ENABLED FALSE
 
-COPY . .
+ADD model.py ./
 
-CMD [ "python3", "app.py"]
+RUN python3 model.py
+
+ADD app.py ./
+
+# CMD [ "python3", "app.py"]
+CMD [ "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--server-header", "--date-header", "--timeout-graceful-shutdown", "30", "--no-access-log", "--log-level", "warning" ]
