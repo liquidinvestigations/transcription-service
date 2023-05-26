@@ -15,7 +15,7 @@ import whisper
 import whisper.transcribe
 
 
-MAX_CONTENT_LENGTH_MINUTES = 30
+MAX_CONTENT_LENGTH_MINUTES = 60
 CUSTOM_PATH = "/openai-whisper"
 app = FastAPI()
 
