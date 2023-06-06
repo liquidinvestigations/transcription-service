@@ -6,7 +6,11 @@ Changes made:
 - update to python 3.11 and gradio 3.32 (latest)
 - disable telemetry and sharing
 - download "large" model in docker container
-- print `.srt` instead of `.text`
+- print `.srt` and `.text`
+- reading environment variables for:
+  - `ENV NUM_THREADS=16` -- threads per worker
+  - `ENV CONCURRENCY_COUNT=1` -- number of workers
+  - `ENV AUTODELETE_AGE_H=6` -- auto-delete time of temp files
 
 
 ---
