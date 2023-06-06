@@ -1,7 +1,6 @@
 """Delete files from /tmp that match our download links and are older than configured age."""
 
 import time
-import os
 import logging
 import os
 import stat
@@ -10,6 +9,7 @@ import tempfile
 
 AUTODELETE_AGE_H = int(os.getenv('AUTODELETE_AGE_H') or '6')
 log = logging.getLogger(__name__)
+
 
 def file_age_in_hours(pathname):
     # https://stackoverflow.com/questions/6879364/print-file-age-in-seconds-using-python/6879539#6879539
@@ -28,7 +28,6 @@ def run_autodelete():
         if age_hours > AUTODELETE_AGE_H:
             log.warning('deleting file (age %s h): %s', age_hours, file)
             os.remove(file)
-
 
 
 if __name__ == '__main__':
