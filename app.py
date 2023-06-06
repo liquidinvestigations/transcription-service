@@ -1,9 +1,14 @@
+import datetime
+import os
+import logging
 from pathlib import Path
 import tempfile
 import zipfile
 import logging
+import time
 
-from model import model
+from model import MODEL_NAMES
+from autodelete import AUTODELETE_AGE_H
 
 import gradio as gr
 from fastapi import FastAPI
@@ -14,8 +19,13 @@ import sys
 import whisper
 import whisper.transcribe
 
+log = logging.getLogger(__name__)
+log.warning('configuring app...')
 
-MAX_CONTENT_LENGTH_MINUTES = 60
+CONCURRENCY_COUNT = int(os.getenv('CONCURRENCY_COUNT') or '1')
+log.warning('concurrency = %s', CONCURRENCY_COUNT)
+
+MAX_CONTENT_LENGTH_MINUTES = 90
 CUSTOM_PATH = "/openai-whisper"
 app = FastAPI()
 
@@ -68,7 +78,9 @@ def get_progressbar_cls(progress):
     return _CustomProgressBar
 
 
-def SpeechToText(audio_or_video_file, progress=gr.Progress()):
+def SpeechToText(_markdown_helptext, audio_or_video_file, model_name, progress=gr.Progress()):
+    t0 = time.time()
+
     # Inject into tqdm.tqdm of Whisper, so we can see progress
     transcribe_module = sys.modules['whisper.transcribe']
     orig_tqdm = transcribe_module.tqdm.tqdm
@@ -76,14 +88,14 @@ def SpeechToText(audio_or_video_file, progress=gr.Progress()):
     transcribe_module.tqdm.tqdm = new_tqdm
 
     if audio_or_video_file is None:
-        msg = " <<< Please upload one Audio or Video file, max {MAX_CONTENT_LENGTH_MINUTES} min. Do not refresh the page."
+        msg = ""
         return [msg, None, None, None]
     progress(0.0, "Checking file...")
-    media_length = int(get_media_length_seconds(audio_or_video_file.name) / 60)
-    if media_length > MAX_CONTENT_LENGTH_MINUTES * 1.1:
+    media_length = round(get_media_length_seconds(audio_or_video_file.name) / 60, 2)
+    if media_length > MAX_CONTENT_LENGTH_MINUTES * 1.2:
         msg = f"""Error: File too long.
 
-        Limit: {MAX_CONTENT_LENGTH_MINUTES} min.
+        Track Length Limit: {MAX_CONTENT_LENGTH_MINUTES} min.
 
         Your submission: {media_length} min.
         """
@@ -92,7 +104,13 @@ def SpeechToText(audio_or_video_file, progress=gr.Progress()):
     progress(0.01, "Detecting Language...")
 
     input_filename = Path(audio_or_video_file.name).name
-    transcript = whisper.transcribe(model, audio_or_video_file.name, verbose=False, fp16=False)
+    model = whisper.load_model(model_name)
+    transcript = whisper.transcribe(
+        model,
+        audio_or_video_file.name,
+        verbose=False,
+        fp16=False,
+    )
     language = transcript['language']
     text = transcript['text']
 
@@ -114,30 +132,73 @@ def SpeechToText(audio_or_video_file, progress=gr.Progress()):
     # remove monkeypatch
     transcribe_module.tqdm.tqdm = orig_tqdm
     del new_tqdm
+    del model
 
-    return (language, srt, text, temp_zipfile.name)
+    proc_time_min = round((time.time() - t0) / 60, 2)
+    speed_x = round((media_length / (0.01 + proc_time_min)), 2)
+    media_length_str = str(datetime.timedelta(seconds=int(60*media_length)))
+    proc_time_str = str(datetime.timedelta(seconds=int(60*proc_time_min)))
+    info_msg = f"""
+    ## Done.
+    ###  _Language_: **{language}**
+    ###  _Track Length_: **{media_length_str}**
+    ###  _Processing time_: **{proc_time_str}**
+    ###  _Speed_: **{speed_x}x ({model_name})**
+    """
+    return (info_msg, srt, text, temp_zipfile.name)
 
 
+DEFAULT_MODEL = MODEL_NAMES[int(len(MODEL_NAMES)/2)]
 demo = gr.Interface(
     title = 'OpenAI Whisper - Multilingual Transcription Service', 
-    fn=SpeechToText, 
+    fn=SpeechToText,
 
     inputs=[
         # gr.Audio(source="upload", type="filepath")
-        gr.File(file_types=['audio', 'video'], type="file"),
+        # gr.Markdown
+        gr.Markdown(
+            f"""
+            ## Upload Limit
+
+            Audio or Video files, **at most {MAX_CONTENT_LENGTH_MINUTES} minutes** in length.
+
+            ## Speed
+
+            - Tiny model speed ~= 
+            - Small model speed ~= 1.5x
+            - Large model speed ~= 1x
+
+            ## Notice
+
+            - **Do not refresh the page**; you will lose all progress.
+                - Do not let your computer sleep while operation finishes.
+            - Transcription Service does not log username or identity.
+            - Zip file download link valid for {AUTODELETE_AGE_H}h after creation.
+
+            """
+        ),
+        gr.File(
+            file_types=['audio', 'video'], type="file", label="File",
+            info=f"Audio or Video files under {MAX_CONTENT_LENGTH_MINUTES} minutes in length.",
+        ),
+        gr.Dropdown(
+            MODEL_NAMES, value=DEFAULT_MODEL, label="Model",
+            info="Bigger model means slower & more accurate results."
+        ),
     ],
     outputs=[
-        gr.Label(label="Language"),
-        gr.Textbox(label="SRT Subtitle"),
-        gr.Textbox(label="Text"),
-        gr.File(label="Output Zip"),
+        gr.Markdown(label="Result Info", info='Output Info.'),
+        gr.Textbox(label="SRT Subtitle", info='Subtitle format with timecodes.'),
+        gr.Textbox(label="Text", info='All text.'),
+        gr.File(label="Output Zip", info=f'Link available for {AUTODELETE_AGE_H}h, only for people with the link.'),
     ],
     live=True,
     allow_flagging="never",
     analytics_enabled=False,
 )
-demo.queue(concurrency_count=1)
-app = gr.mount_gradio_app(app, demo, path=CUSTOM_PATH)
+demo.queue(concurrency_count=CONCURRENCY_COUNT)
+log.warning('starting server...')
+gr_app = gr.mount_gradio_app(app, demo, path=CUSTOM_PATH)
 # demo.launch(
 #     debug=True,
 #     share=False,

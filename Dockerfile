@@ -18,6 +18,11 @@ ADD model.py ./
 RUN python3 model.py
 
 ADD app.py ./
+ADD autodelete.py ./
+ADD in-container.sh ./
 
-# CMD [ "python3", "app.py"]
-CMD [ "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--server-header", "--date-header", "--timeout-graceful-shutdown", "30", "--no-access-log", "--log-level", "warning" ]
+CMD ./in-container.sh
+
+ENV NUM_THREADS=16
+ENV CONCURRENCY_COUNT=1
+ENV AUTODELETE_AGE_H=6

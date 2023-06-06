@@ -1,9 +1,9 @@
-#!/bin/bash -ex
+#!/bin/bash
 set -ex
 IMG="liquidinvestigations/openai-whisper-gradio:main"
 NAME=whisper
-docker build . --tag $IMG
-docker push $IMG || true
 docker rm -f $NAME
-docker run --rm --name $NAME -p 8000:8000 $IMG
-
+docker build . --tag $IMG
+docker run -d --rm --name $NAME -p 8000:8000 $IMG
+( docker push $IMG || echo "\n[WARNING] CANNOT PUSH TO DOCKER HUB \n" ) &
+docker logs -f $NAME
